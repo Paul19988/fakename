@@ -19,16 +19,14 @@ import tschipp.fakename.CommandFakeName.FakenameArgumentType;
 
 @EventBusSubscriber(bus = Bus.MOD)
 @Mod(FakeName.MODID)
-public class FakeName
-{
-	public static final String MODID = "fakename";
+public class FakeName {
+    public static final String MODID = "fakename";
 
     public static SimpleChannel network;
 
     public static IModInfo info;
 
-    public FakeName()
-    {
+    public FakeName() {
         FMLJavaModLoadingContext.get().getModEventBus().addListener(this::setup);
 
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC);
@@ -36,39 +34,31 @@ public class FakeName
         info = ModLoadingContext.get().getActiveContainer().getModInfo();
     }
 
-    private void setup(final FMLCommonSetupEvent event)
-    {
+    private void setup(final FMLCommonSetupEvent event) {
         event.enqueueWork(() -> {
-        	 FakeName.network = NetworkRegistry.newSimpleChannel(new ResourceLocation(FakeName.MODID, "fakenamechannel"), () -> FakeName.info.getVersion().toString(), s -> true, s -> true);
-             FakeName.network.registerMessage(0, FakeNamePacket.class, FakeNamePacket::toBytes, FakeNamePacket::new, FakeNamePacket::handle);
-        
-             ArgumentTypes.register(MODID + ":" + "fakename", FakenameArgumentType.class, new FakenameArgumentType.Serializer());
+            FakeName.network = NetworkRegistry.newSimpleChannel(new ResourceLocation(FakeName.MODID, "fakenamechannel"), () -> FakeName.info.getVersion().toString(), s -> true, s -> true);
+            FakeName.network.registerMessage(0, FakeNamePacket.class, FakeNamePacket::toBytes, FakeNamePacket::new, FakeNamePacket::handle);
+
+            ArgumentTypes.register(MODID + ":" + "fakename", FakenameArgumentType.class, new FakenameArgumentType.Serializer());
         });
-       
+
     }
 
-    public static void sendPacket(Player player, String fakename, int operation)
-    {
+    public static void sendPacket(Player player, String fakename, int operation) {
         performFakenameOperation(player, fakename, operation);
         FakeName.network.send(PacketDistributor.ALL.noArg(), new FakeNamePacket(fakename, player.getId(), operation));
     }
 
-    public static void performFakenameOperation(Player player, String fakename, int operation)
-    {
+    public static void performFakenameOperation(Player player, String fakename, int operation) {
         CompoundTag tag = player.getPersistentData();
 
-        if (operation == 0)
-        {
+        if (operation == 0) {
             tag.putString("fakename", fakename);
-            player.refreshDisplayName();
-        }
-         else
-         {
+        } else {
             tag.remove("fakename");
-            player.refreshDisplayName();
         }
+        player.refreshDisplayName();
     }
-
 
 
 }
