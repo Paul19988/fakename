@@ -1,7 +1,6 @@
 package tschipp.fakename;
 
 import io.netty.buffer.ByteBuf;
-import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.fml.common.network.ByteBufUtils;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 
@@ -10,11 +9,10 @@ public class FakeNamePacket implements IMessage {
 	public String fakename;
 	public int entityId;
 	public int deleteFakename;
-	
+
 	public FakeNamePacket() {
-		
 	}
-	
+
 	public FakeNamePacket(String fakename, int entityID, int delete) {
 		this.fakename = fakename;
 		this.entityId = entityID;
@@ -34,5 +32,4 @@ public class FakeNamePacket implements IMessage {
 		ByteBufUtils.writeVarInt(buf, this.entityId, 4);
 		ByteBufUtils.writeVarInt(buf, this.deleteFakename, 4);
 	}
-
 }

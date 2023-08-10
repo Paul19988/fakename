@@ -1,8 +1,10 @@
 package tschipp.fakename;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
@@ -13,235 +15,173 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.network.play.server.SPacketPlayerListItem;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.management.PlayerList;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.text.TextComponentString;
-import net.minecraft.util.text.TextFormatting;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.entity.player.PlayerEvent;
+
+import javax.annotation.Nullable;
 
 public class CommandFakeName extends CommandBase implements ICommand {
 
-	private final List names;
+    private final List<String> names = new ArrayList<>();
 
-	public CommandFakeName()
-	{
-		names = new ArrayList();
-		names.add("fakename");
-		names.add("fn");
-		names.add("fname");
-	}
+    public CommandFakeName() {
+        names.add("fakename");
+        names.add("fn");
+        names.add("fname");
+    }
 
-	@Override
-	public int compareTo(ICommand o)
-	{
-		return this.getCommandName().compareTo(o.getCommandName());
-	}
+    @Override
+    public int compareTo(ICommand o) {
+        return this.getName().compareTo(o.getName());
+    }
 
-	@Override
-	public String getCommandName()
-	{
-		return "fakename";
-	}
+    public String getCommandUsageSet() {
+        return "/fakename <mode> [player] [fakename]";
+    }
 
-	@Override
-	public String getCommandUsage(ICommandSender sender)
-	{
+    private int handleSetname(ICommandSender sender, Collection<Entity> players, String fakename) {
+        fakename = fakename.replace("&", "\u00a7") + "\u00a7r";
+        fakename = fakename.replace("/-", " ");
 
-		return "/fakename <mode> <args...>";
-	}
+        for(Entity player : players) {
+            NBTTagCompound tag = player.getEntityData();
+            tag.setString(FakeName.KEY, fakename);
+            sender.sendMessage(new TextComponentString(player.getName() + "'s name is now " + fakename));
+            FakeName.getInstance().getNetwork().sendToAll(new FakeNamePacket(fakename, player.getEntityId(), 0));
+            player.setCustomNameTag(fakename);
+            ((EntityPlayer) player).refreshDisplayName();
+        }
 
-	public String getCommandUsageReal()
-	{
-		return "/fakename real <fakename> ";
-	}
+        return 1;
+    }
 
-	public String getCommandUsageClear()
-	{
-		return "/fakename clear [player]";
-	}
+    private int handleClear(ICommandSender sender, Collection<Entity> players) {
+        for(Entity player : players) {
+            NBTTagCompound tag = player.getEntityData();
+            tag.removeTag(FakeName.KEY);
+            sender.sendMessage(new TextComponentString(player.getName() + "'s fake name was cleared!"));
+            FakeName.getInstance().getNetwork().sendToAll(new FakeNamePacket("something", player.getEntityId(), 1));
+            player.setCustomNameTag(player.getName());
+            ((EntityPlayer) player).refreshDisplayName();
+        }
 
-	public String getCommandUsageSet()
-	{
-		return "/fakename set [player] <fakename>";
-	}
+        return 1;
+    }
 
-	@Override
-	public List<String> getCommandAliases()
-	{
-		return this.names;
-	}
+    private int handleRealname(ICommandSender sender, String fakename) {
+        String copy = fakename;
+        fakename = fakename.replace("&", "\u00a7") + "\u00a7r";
+        fakename = fakename.replace("/-", " ");
+        PlayerList players = sender.getServer().getPlayerList();
+        boolean success = false;
+        for(EntityPlayerMP player : players.getPlayers()) {
+            if (player.getEntityData().hasKey(FakeName.KEY)) {
+                if (player.getEntityData().getString(FakeName.KEY).equalsIgnoreCase(fakename)) {
+                    sender.sendMessage(new TextComponentString(copy + "'s real name is " + player.getGameProfile().getName()));
+                    success = true;
+                }
+            }
+        }
 
-	@Override
-	public void execute(MinecraftServer server, ICommandSender sender, String[] args) throws CommandException
-	{
-		if(args.length > 0)
-		{
-			if (args[0].toLowerCase().equals("set"))
-			{
-				// Handling set <Playername> <Fakename>
-				if (args.length == 3)
-				{
-					String playername = args[1];
-					String fakename = args[2];
-					List<Entity> player = CommandBase.getEntityList(server, sender, playername);
-					for(int i = 0; i < player.size(); i++)
-					{
-						if(player.get(i) instanceof EntityPlayerMP)
-						{
-							NBTTagCompound tag = player.get(i).getEntityData();
-							fakename = fakename.replace("&", "\u00a7");
-							fakename = fakename.replace("/-", " ");
-							tag.setString("fakename", fakename);
-							if (sender.getCommandSenderEntity() != null && sender.getCommandSenderEntity() instanceof EntityPlayerMP && !playername.equals(((EntityPlayer) sender).getGameProfile().getName()))
-							{
-								sender.addChatMessage(new TextComponentString(playername + "'s name is now " + fakename));
-							}
-							player.get(i).addChatMessage(new TextComponentString("Your name is now " + fakename));
-							FakeName.network.sendToAll(new FakeNamePacket(fakename , player.get(i).getEntityId(), 0));
-							((EntityPlayer) player.get(i)).refreshDisplayName();
-						}
-						else
-						{
-							sender.addChatMessage(new TextComponentString(TextFormatting.RED + "You can not select non-player entities"));
-						}
-					}
-				}
-				// Handling set <Fakename>
-				else if (args.length == 2)
-				{
-					String fakename = args[1];
-					EntityPlayerMP player = CommandBase.getPlayer(server, sender, sender.getName());
-					NBTTagCompound tag = player.getEntityData();
-					fakename = fakename.replace("&", "\u00a7");
-					fakename = fakename.replace("/-", " ");
-					tag.setString("fakename", fakename);
-					player.addChatMessage(new TextComponentString("Your name is now " + fakename));
-					FakeName.network.sendToAll(new FakeNamePacket(fakename , player.getEntityId(), 0));
-					player.refreshDisplayName();
-				}
+        if (success) {
+            return 1;
+        }
 
-				else
-				{
-					throw new WrongUsageException(this.getCommandUsageSet());
-				}
+        sender.sendMessage(new TextComponentString("No player with that name was found!"));
+        return 0;
+    }
 
-				// Handling real <Fakename>
-			} 
-			//Handling clear <playername>
-			else if (args[0].toLowerCase().equals("clear"))
-			{
-				if (args.length == 2)
-				{
-					String playername = args[1];
-					List<Entity> player = CommandBase.getEntityList(server, sender, playername);
-					for(int i = 0; i < player.size(); i++)
-					{
-						if(player.get(i) instanceof EntityPlayerMP)
-						{
-							if(player.get(i).getEntityData() != null && player.get(i).getEntityData().hasKey("fakename"))
-							{
-								player.get(i).getEntityData().removeTag("fakename");
-								if (sender.getCommandSenderEntity() != null && sender.getCommandSenderEntity() instanceof EntityPlayerMP && !playername.equals(((EntityPlayer) sender).getGameProfile().getName()))
-								{
-									sender.addChatMessage(new TextComponentString(playername+"'s Fake Name was removed"));
-								}
-								player.get(i).addChatMessage(new TextComponentString("Your Fake Name was removed"));
-								FakeName.network.sendToAll(new FakeNamePacket("something" , player.get(i).getEntityId(), 1));
-								((EntityPlayer) player.get(i)).refreshDisplayName();
-							}
-							else
-							{
-								sender.addChatMessage(new TextComponentString(TextFormatting.RED + "The provided Player does not have a Fake Name"));
-							}
-						}
-						else
-						{
-							sender.addChatMessage(new TextComponentString(TextFormatting.RED + "You can not select Entities"));
-						}
-					}
-				}
-				else if (args.length == 1)
-				{
-					EntityPlayerMP player = (EntityPlayerMP)sender;
-					if(player.getEntityData() != null && player.getEntityData().hasKey("fakename"))
-					{
-						player.getEntityData().removeTag("fakename");
-						sender.addChatMessage(new TextComponentString("Your Fake Name was removed"));
-						FakeName.network.sendToAll(new FakeNamePacket("something" , player.getEntityId(), 1));
-						player.refreshDisplayName();
-					}
-					else
-					{
-						sender.addChatMessage(new TextComponentString(TextFormatting.RED + "You do not have a Fake Name"));
-					}
+    @Override
+    public List<String> getAliases() {
+        return this.names;
+    }
 
-				}
-				else
-				{
-					throw new WrongUsageException(this.getCommandUsageClear());
-				}
+    @Override
+    public String getName() {
+        return "fakename";
+    }
 
-			}
-			else
-			{
-				throw new WrongUsageException(this.getCommandUsage(sender));
+    @Override
+    public String getUsage(ICommandSender sender) {
+        return "/fakename <mode> <args...>";
+    }
 
-			}
+    @Override
+    public void execute(MinecraftServer server, ICommandSender sender, String[] args) throws CommandException {
+        if (args.length < 1) {
+            throw new WrongUsageException(this.getUsage(sender));
+        }
 
+        if(args[0].equalsIgnoreCase("set")) {
+            // /fakename set <playername> <fakename>
+            if (args.length == 3) {
+                String fakeName = args[2];
+                handleSetname(sender, CommandBase.getEntityList(server, sender, args[1]), fakeName);
+            } else if (args.length == 2) {
+                String fakeName = args[1];
+                if (sender.getCommandSenderEntity() instanceof EntityPlayerMP) {
+                    handleSetname(sender, Collections.singletonList((EntityPlayerMP) sender.getCommandSenderEntity()), fakeName);
+                } else {
+                    throw new WrongUsageException(this.getCommandUsageSet());
+                }
+            } else {
+                throw new WrongUsageException(this.getCommandUsageSet());
+            }
+        } else if(args[0].equalsIgnoreCase("clear")) {
+            // /fakename clear <playername>
+            if (args.length == 2) {
+                if (sender.getCommandSenderEntity() instanceof EntityPlayerMP) {
+                    handleClear(sender, CommandBase.getEntityList(server, sender, args[1]));
+                } else {
+                    throw new WrongUsageException(this.getCommandUsageSet());
+                }
+            } else if (args.length == 1) {
+                if (sender.getCommandSenderEntity() instanceof EntityPlayerMP) {
+                    handleClear(sender, Collections.singletonList((EntityPlayerMP) sender.getCommandSenderEntity()));
+                } else {
+                    throw new WrongUsageException(this.getCommandUsageSet());
+                }
+            } else {
+                throw new WrongUsageException(this.getCommandUsageSet());
+            }
+        } else if(args[0].equalsIgnoreCase("real")) {
+            // /fakename real <name>
+            if(args.length == 2) {
+                handleRealname(sender, args[1]);
+            }else{
+                throw new WrongUsageException(this.getCommandUsageSet());
+            }
+        } else {
+            throw new WrongUsageException(this.getUsage(sender));
+        }
+    }
 
-		}
-		else
-		{
-			throw new WrongUsageException(this.getCommandUsage(sender));
-		}
+    @Override
+    public boolean checkPermission(MinecraftServer server, ICommandSender sender) {
+        return sender.canUseCommand(this.getRequiredPermissionLevel(), this.getName());
+    }
 
-	}
+    @Override
+    public List<String> getTabCompletions(MinecraftServer server, ICommandSender sender, String[] args, @Nullable BlockPos targetPos) {
+        if(args.length < 1) {
+            return Collections.emptyList(); // Return an empty list if the length of the args is less than 1
+        }
 
-	@Override
-	public boolean checkPermission(MinecraftServer server, ICommandSender sender)
-	{
-		return sender.canCommandSenderUseCommand(this.getRequiredPermissionLevel(), this.getCommandName());
-	}
+        if (args.length == 1) {
+            return CommandBase.getListOfStringsMatchingLastWord(args, "set", "clear", "real");
+        } else if (args.length == 2 && (args[0].equalsIgnoreCase("set") || args[0].equalsIgnoreCase("clear") || args[0].equalsIgnoreCase("real"))) {
+            return CommandBase.getListOfStringsMatchingLastWord(args, server.getPlayerList().getPlayers().stream().map(EntityPlayerMP::getName).collect(Collectors.toList()));
+        }
 
-	@Override
-	public List<String> getTabCompletionOptions(MinecraftServer server, ICommandSender sender, String[] args, BlockPos pos)
-	{
+        return Collections.emptyList();
+    }
 
-		if (args.length > 0)
-		{
-			if (args.length == 1)
-			{
-				return CommandBase.getListOfStringsMatchingLastWord(args, "set", "clear");
-			}
-
-			if (args.length == 2 && (args[0].equals("set") || args[0].equals("clear")))
-			{
-				return CommandBase.getListOfStringsMatchingLastWord(args, server.getAllUsernames());
-			}
-
-			else
-			{
-				return Collections.<String>emptyList();
-			}
-
-		}
-
-		return Collections.<String>emptyList();
-
-	}
-
-	@Override
-	public boolean isUsernameIndex(String[] args, int index)
-	{
-
-		return false;
-	}
-
-	@Override
-	public int getRequiredPermissionLevel()
-	{
-		return 2;
-	}
+    @Override
+    public int getRequiredPermissionLevel() {
+        return 2;
+    }
 
 }
